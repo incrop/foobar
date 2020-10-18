@@ -4,22 +4,41 @@ import java.util.Arrays;
 
 public class Solution {
     public static int[] solution(int[][] m) {
+        // The problem can be modeled by Absorbing Markov chain
+        // Stable forms are absorbing states, other forms are transient states.
+        // We would need to create two matrices:
+        // AbsMarkovChain.trans - transient to transient state probabilities (Q)
+        // AbsMarkovChain.absorb - transient to absorbing state probabilities (R)
+        //
+        //
+        // See https://en.wikipedia.org/wiki/Absorbing_Markov_chain
+
         AbsMarkovChain input = AbsMarkovChain.parse(m);
+
+        // Corner case - all states are absorbing
         if (input.trans.height() == 0) {
             int[] result = new int[m.length + 1];
-            Arrays.fill(result, 1);
-            result[m.length] = Arrays.stream(result).sum() - 1;
+            result[0] = 1;
+            result[m.length] = 1;
             return result;
         }
+
+        // We would need to find absorbing probabilities for state 0.
+        // This is covered by B = (I - Q)^-1 * R
         Mat absorbProbs = Mat.identity(input.trans.height())
                 .minus(input.trans)
                 .invert()
                 .multiply(input.absorb);
+
+        return convertResult(absorbProbs);
+    }
+
+    private static int[] convertResult(Mat absorbProbs) {
         int[] result = new int[absorbProbs.width() + 1];
         for (int i = 0; i < absorbProbs.width(); i++) {
             result[i] = (int) absorbProbs.nums[0][i];
         }
-        result[absorbProbs.width()] = (int)absorbProbs.dens[0];
+        result[absorbProbs.width()] = (int) absorbProbs.dens[0];
         return result;
     }
 
@@ -40,6 +59,7 @@ public class Solution {
                         absorbIdx = i;
                     }
                 } else {
+                    // Reorder rows (and columns) in case absorbing state is not at the end of the list.
                     if (absorbIdx != -1) {
                         for (int j = i; j > absorbIdx; j--) {
                             int[] tmpRow = m[j];
@@ -55,22 +75,20 @@ public class Solution {
                     }
                 }
             }
-            long[][] transNums = new long[absorbIdx][absorbIdx];
-            long[] transDens = new long[absorbIdx];
-            long[][] absorbNums = new long[absorbIdx][m.length - absorbIdx];
-            long[] absorbDens = new long[absorbIdx];
+            Mat trans = new Mat(absorbIdx, absorbIdx);
+            Mat absorb = new Mat(absorbIdx, m.length - absorbIdx);
             for (int i = 0; i < absorbIdx; i++) {
-                for (int j = 0; j < absorbIdx; j++) {
-                    transNums[i][j] = m[i][j];
-                }
-                for (int j = 0; j < m.length - absorbIdx; j++) {
-                    absorbNums[i][j] = m[i][j + absorbIdx];
-                }
                 int den = Arrays.stream(m[i]).sum();
-                transDens[i] = den;
-                absorbDens[i] = den;
+                for (int j = 0; j < trans.width(); j++) {
+                    trans.addValue(i, j, m[i][j], den);
+                }
+                trans.simplifyRow(i);
+                for (int j = 0; j < absorb.width(); j++) {
+                    absorb.addValue(i, j, m[i][j + absorbIdx], den);
+                }
+                absorb.simplifyRow(i);
             }
-            return new AbsMarkovChain(new Mat(transNums, transDens), new Mat(absorbNums, absorbDens));
+            return new AbsMarkovChain(trans, absorb);
         }
 
         static boolean isAbsorbing(int i, int[] row) {
@@ -87,128 +105,38 @@ public class Solution {
         final long[][] nums;
         final long[] dens;
 
-        Mat(long[][] nums, long[] dens) {
-            this.nums = nums;
-            this.dens = dens;
-            simplifyAll();
+        Mat(int height, int width) {
+            this.nums = new long[height][width];
+            this.dens = new long[height];
+            Arrays.fill(dens, 1);
         }
 
         static Mat identity(int size) {
-            long[][] nums = new long[size][size];
+            Mat id = new Mat(size, size);
             for (int i = 0; i < size; i++) {
-                nums[i][i] = 1;
+                id.addValue(i, i, 1, 1);
             }
-            long[] dens = new long[size];
-            Arrays.fill(dens, 1);
-            return new Mat(nums, dens);
+            return id;
         }
 
-        Mat minus(Mat that) {
-            int m = height();
-            int n = width();
-            long[][] nums = new long[m][n];
-            long[] dens = new long[m];
-            for (int i = 0; i < m; i++) {
-                dens[i] = this.dens[i] * that.dens[i];
-                for (int j = 0; j < n; j++) {
-                    nums[i][j] = this.nums[i][j] * that.dens[i] - that.nums[i][j] * this.dens[i];
+        void addValue(int i, int j, long num, long den) {
+            long oldDen = dens[i];
+            if (oldDen == den) {
+                nums[i][j] += num;
+                return;
+            }
+            long lcm = den * oldDen / absGcd(den, oldDen);
+            if (lcm > oldDen) {
+                long mul = lcm / oldDen;
+                for (int k = 0; k < width(); k++) {
+                    nums[i][k] *= mul;
                 }
             }
-            return new Mat(nums, dens);
+            nums[i][j] += (lcm / den) * num;
+            dens[i] = lcm;
         }
 
-        // Gauss-Jordan method
-        Mat invert() {
-            int width2 = width() * 2;
-            long[][] nums = new long[height()][width2];
-            long[] dens = this.dens.clone();
-            for (int i = 0; i < nums.length; i++) {
-                System.arraycopy(this.nums[i], 0, nums[i], 0, width());
-                nums[i][width() + i] = dens[i];
-            }
-            for (int i = 0; i < nums.length; i++) {
-                if (nums[i][i] == 0) {
-                    int k = i + 1;
-                    while (nums[k][i] == 0) {
-                        k++;
-                    }
-                    long[] tmpRow = nums[k];
-                    nums[k] = nums[i];
-                    nums[i] = tmpRow;
-                    long tmp = dens[k];
-                    dens[k] = dens[i];
-                    dens[i] = tmp;
-                }
-                long num = nums[i][i];
-                for (int j = 0; j < width2; j++) {
-                    nums[i][j] *= dens[i];
-                }
-                dens[i] *= num;
-                simplifyRow(nums, dens, i);
-                for (int k = 0; k < nums.length; k++) {
-                    if (i == k || nums[k][i] == 0) {
-                        continue;
-                    }
-                    long n = nums[k][i];
-                    for (int j = 0; j < width2; j++) {
-                        nums[k][j] = nums[k][j] * dens[i] - nums[i][j] * n;
-                    }
-                    dens[k] *= dens[i];
-                    simplifyRow(nums, dens, k);
-                }
-            }
-
-            long[][] numsRes = new long[height()][width()];
-            long[] densRes = dens.clone();
-            for (int i = 0; i < nums.length; i++) {
-                System.arraycopy(nums[i], width(), numsRes[i], 0, width());
-            }
-            return new Mat(numsRes, densRes);
-        }
-
-        Mat multiply(Mat that) {
-            long[][] nums = new long[this.height()][that.width()];
-            long[] dens = new long[this.height()];
-            Arrays.fill(dens, 1);
-            for (int i = 0; i < nums.length; i++) {
-                for (int j = 0; j < nums[0].length; j++) {
-                    long num = 0;
-                    long den = 1;
-                    for (int k = 0; k < this.width(); k++) {
-                        long num1 = this.nums[i][k] * that.nums[k][j];
-                        long den1 = this.dens[i] * that.dens[k];
-                        num = num * den1 + num1 * den;
-                        den = den * den1;
-                        long gcd = absGcd(num, den);
-                        num /= gcd;
-                        den /= gcd;
-                    }
-                    for (int k = 0; k < nums[0].length; k++) {
-                        nums[i][k] *= den;
-                    }
-                    nums[i][j] += num * dens[i];
-                    dens[i] *= den;
-                    simplifyRow(nums, dens, i);
-                }
-            }
-            return new Mat(nums, dens);
-        }
-
-        int height() {
-            return nums.length;
-        }
-
-        int width() {
-            return nums[0].length;
-        }
-
-        private void simplifyAll() {
-            for (int i = 0; i < height(); i++) {
-                simplifyRow(nums, dens, i);
-            }
-        }
-
-        private static void simplifyRow(long[][] nums, long[] dens, int i) {
+        void simplifyRow(int i) {
             long gcd = dens[i];
             for (int j = 0; j < nums[i].length; j++) {
                 gcd = absGcd(nums[i][j], gcd);
@@ -223,6 +151,107 @@ public class Solution {
             for (int j = 0; j < nums[i].length; j++) {
                 nums[i][j] /= gcd;
             }
+        }
+
+        Mat minus(Mat that) {
+            Mat res = copy();
+            for (int i = 0; i < height(); i++) {
+                for (int j = 0; j < width(); j++) {
+                    res.addValue(i, j, -that.nums[i][j], that.dens[i]);
+                }
+            }
+            return res;
+        }
+
+        // Gauss-Jordan method
+        Mat invert() {
+            // Copy of current matrix with identity matrix on the right half
+            Mat mat = new Mat(height(), width() * 2);
+            System.arraycopy(this.dens, 0, mat.dens, 0, width());
+            for (int i = 0; i < mat.height(); i++) {
+                System.arraycopy(this.nums[i], 0, mat.nums[i], 0, width());
+                mat.nums[i][width() + i] = mat.dens[i];
+            }
+            
+            for (int i = 0; i < mat.height(); i++) {
+                // Switch row with zero value on diagonal with some other row
+                if (mat.nums[i][i] == 0) {
+                    int k = i + 1;
+                    while (mat.nums[k][i] == 0) {
+                        k++;
+                    }
+                    long[] tmpRow = mat.nums[k];
+                    mat.nums[k] = mat.nums[i];
+                    mat.nums[i] = tmpRow;
+                    long tmp = mat.dens[k];
+                    mat.dens[k] = mat.dens[i];
+                    mat.dens[i] = tmp;
+                }
+                // Divide row to make 1 in diagonal
+                if (mat.nums[i][i] != mat.dens[i]) {
+                    long num = mat.nums[i][i];
+                    long den = mat.dens[i];
+                    for (int j = 0; j < mat.width(); j++) {
+                        mat.nums[i][j] *= den;
+                    }
+                    mat.dens[i] *= num;
+                    mat.simplifyRow(i);
+                }
+                // Remove this row mutiplied by some factor from all other rows, to have all 0 in the column
+                for (int k = 0; k < mat.height(); k++) {
+                    if (i == k || mat.nums[k][i] == 0) {
+                        continue;
+                    }
+                    long num = mat.nums[k][i];
+                    long den = mat.dens[i];
+                    mat.dens[k] *= den;
+                    for (int j = 0; j < mat.width(); j++) {
+                        mat.nums[k][j] *= den;
+                        mat.nums[k][j] -= mat.nums[i][j] * num;
+                    }
+                    mat.simplifyRow(i);
+                }
+            }
+            // Return right half of the matrix
+            Mat res = new Mat(height(), width());
+            System.arraycopy(mat.dens, 0, res.dens, 0, width());
+            for (int i = 0; i < height(); i++) {
+                System.arraycopy(mat.nums[i], width(), res.nums[i], 0, width());
+                res.simplifyRow(i);
+            }
+            return res;
+        }
+
+        Mat multiply(Mat that) {
+            Mat res = new Mat(this.height(), that.width());
+            for (int i = 0; i < res.height(); i++) {
+                for (int j = 0; j < res.width(); j++) {
+                    for (int k = 0; k < this.width(); k++) {
+                        long num = this.nums[i][k] * that.nums[k][j];
+                        long den = this.dens[i] * that.dens[k];
+                        res.addValue(i, j, num, den);
+                    }
+                }
+                res.simplifyRow(i);
+            }
+            return res;
+        }
+
+        int height() {
+            return nums.length;
+        }
+
+        int width() {
+            return nums[0].length;
+        }
+
+        private Mat copy() {
+            Mat copy = new Mat(height(), width());
+            System.arraycopy(dens, 0, copy.dens, 0, height());
+            for (int i = 0; i < height(); i++) {
+                System.arraycopy(nums[i], 0, copy.nums[i], 0, width());
+            }
+            return copy;
         }
 
         @Override
@@ -245,11 +274,13 @@ public class Solution {
     }
 
     static long absGcd(long a, long b) {
+        a = Math.abs(a);
+        b = Math.abs(b);
         while (a != 0) {
             long aTmp = a;
             a = b % a;
             b = aTmp;
         }
-        return Math.abs(b);
+        return b;
     }
 }

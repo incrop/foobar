@@ -154,6 +154,13 @@ class MarkovTest {
                 {0}
             }));
         assertArrayEquals(
+            new int[] {1, 0, 0, 1},
+            Solution.solution(new int[][] {
+                {0, 0, 0},
+                {0, 0, 0},
+                {0, 0, 0},
+            }));
+        assertArrayEquals(
             new int[] {1, 1},
             Solution.solution(new int[][] {
                 {0, 0},
@@ -266,26 +273,12 @@ class MarkovTest {
     }
 
     private Solution.Mat mat(int[][][] data) {
-        long[][] nums = new long[data.length][data[0].length];
-        long[] dens = new long[data.length];
-        for (int i = 0; i < data.length; i++) {
-            long commonDen = lcd(data[i]);
-            for (int j = 0; j < data[0].length; j++) {
-                long mul = commonDen / data[i][j][1];
-                nums[i][j] = data[i][j][0] * mul;
+        Solution.Mat mat = new Solution.Mat(data.length, data[0].length);
+        for (int i = 0; i < mat.height(); i++) {
+            for (int j = 0; j < mat.width(); j++) {
+                mat.addValue(i, j, data[i][j][0], data[i][j][1]);
             }
-            dens[i] = commonDen;
         }
-        return new Solution.Mat(nums, dens);
-    }
-
-    private long lcd(int[][] row) {
-        long lcd = row[0][1];
-
-        for (int i = 1; i < row.length; i++) {
-            long mul = lcd * row[i][1];
-            lcd = Math.max(lcd, mul / absGcd(lcd, mul));
-        }
-        return lcd;
+        return mat;
     }
 }

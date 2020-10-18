@@ -2,6 +2,7 @@ package markov;
 
 import org.junit.jupiter.api.Test;
 
+import static markov.Solution.absGcd;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 class MarkovTest {
@@ -61,7 +62,7 @@ class MarkovTest {
         assertMat(
             new int[][][] {
                 {{1, 1}, {0, 1}, {0, 1}},
-                {{0, 0}, {1, 1}, {0, 1}},
+                {{0, 1}, {1, 1}, {0, 1}},
                 {{0, 1}, {0, 1}, {1, 1}}
             },
             Solution.Mat.identity(3));
@@ -148,6 +149,37 @@ class MarkovTest {
     @Test
     void testSolution() {
         assertArrayEquals(
+            new int[] {1, 1},
+            Solution.solution(new int[][] {
+                {0}
+            }));
+        assertArrayEquals(
+            new int[] {1, 1},
+            Solution.solution(new int[][] {
+                {0, 0},
+                {1, 1}
+            }));
+        assertArrayEquals(
+            new int[] {1, 2, 3},
+            Solution.solution(new int[][] {
+                {1, 2, 3, 0, 0, 0},
+                {4, 5, 6, 0, 0, 0},
+                {7, 8, 9, 1, 0, 0},
+                {0, 0, 0, 0, 1, 2},
+                {0, 0, 0, 0, 0, 0},
+                {0, 0, 0, 0, 0, 0}
+            }));
+        assertArrayEquals(
+            new int[] {100, 90, 81, 271},
+            Solution.solution(new int[][] {
+                {0, 9, 0, 1, 0, 0},
+                {0, 0, 9, 0, 1, 0},
+                {9, 0, 0, 0, 0, 1},
+                {0, 0, 0, 1, 0, 0},
+                {0, 0, 0, 0, 1, 0},
+                {0, 0, 0, 0, 0, 1}
+            }));
+        assertArrayEquals(
             new int[] {7, 6, 8, 21},
             Solution.solution(new int[][] {
                 {0, 2, 1, 0, 0},
@@ -184,7 +216,7 @@ class MarkovTest {
                     {0, 0, 0, 0}
             }));
         assertArrayEquals(
-            new int[] {79, 9, 9, 81, 200},
+            new int[] {395, 45, 36, 324, 800},
             Solution.solution(new int[][] {
                     {1, 1, 1, 1, 0, 0, 0, 0, 0, 0},
                     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -198,13 +230,27 @@ class MarkovTest {
                     {0, 0, 0, 0, 0, 0, 0, 5, 0, 0},
             }));
         assertArrayEquals(
-            new int[] {79, 9, 9, 81, 200},
+            new int[] {1, 1, 2, 4, 8, 16},
             Solution.solution(new int[][] {
-                    {9, 6, 8, 9, 4, 1, 1, 1, 1, 1},
-                    {8, 2, 9, 9, 5, 1, 1, 1, 1, 1},
-                    {8, 9, 2, 3, 4, 1, 1, 1, 1, 1},
-                    {5, 8, 5, 9, 2, 1, 1, 1, 1, 1},
-                    {7, 1, 3, 4, 2, 1, 1, 1, 1, 1},
+                    {0, 1, 0, 0, 0, 0, 0, 0, 0, 1},
+                    {0, 0, 1, 0, 0, 0, 0, 0, 1, 0},
+                    {0, 0, 0, 1, 0, 0, 0, 1, 0, 0},
+                    {0, 0, 0, 0, 1, 0, 1, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+            }));
+        assertArrayEquals(
+            new int[] {4, 5, 5, 4, 2, 20},
+            Solution.solution(new int[][] {
+                    {0, 7, 0, 17, 0, 1, 0, 5, 0, 2},
+                    {0, 0, 29, 0, 28, 0, 3, 0, 16, 0},
+                    {0, 3, 0, 0, 0, 1, 0, 0, 0, 0},
+                    {48, 0, 3, 0, 0, 0, 17, 0, 0, 0},
+                    {0, 6, 0, 0, 0, 1, 0, 0, 0, 0},
                     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
                     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
                     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -220,12 +266,26 @@ class MarkovTest {
     }
 
     private Solution.Mat mat(int[][][] data) {
-        Solution.Mat mat = new Solution.Mat(data.length, data[0].length);
-        for (int i = 0; i < mat.height(); i++) {
-            for (int j = 0; j < mat.width(); j++) {
-                mat.addVal(i, j, data[i][j][0], data[i][j][1]);
+        long[][] nums = new long[data.length][data[0].length];
+        long[] dens = new long[data.length];
+        for (int i = 0; i < data.length; i++) {
+            long commonDen = lcd(data[i]);
+            for (int j = 0; j < data[0].length; j++) {
+                long mul = commonDen / data[i][j][1];
+                nums[i][j] = data[i][j][0] * mul;
             }
+            dens[i] = commonDen;
         }
-        return mat;
+        return new Solution.Mat(nums, dens);
+    }
+
+    private long lcd(int[][] row) {
+        long lcd = row[0][1];
+
+        for (int i = 1; i < row.length; i++) {
+            long mul = lcd * row[i][1];
+            lcd = Math.max(lcd, mul / absGcd(lcd, mul));
+        }
+        return lcd;
     }
 }

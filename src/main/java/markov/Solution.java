@@ -209,7 +209,7 @@ public class Solution {
                         mat.nums[k][j] *= den;
                         mat.nums[k][j] -= mat.nums[i][j] * num;
                     }
-                    mat.simplifyRow(i);
+                    mat.simplifyRow(k);
                 }
             }
             // Return right half of the matrix

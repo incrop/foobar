@@ -113,16 +113,16 @@ public class Solution {
         addObstacleDirection(reflTarget);
         // Add room corners to obstacle set
         if (roomX <= 0 && roomY <= 0) {
-            addObstacleDirection(reflectedPoint(dimensions, roomX - 1, roomY - 1));
+            addObstacleDirection(topLeftCorner(roomX, roomY));
         }
         if (roomX >= 0 && roomY <= 0) {
-            addObstacleDirection(reflectedPoint(dimensions, roomX, roomY - 1));
+            addObstacleDirection(topLeftCorner(roomX + 1, roomY));
         }
         if (roomX <= 0 && roomY >= 0) {
-            addObstacleDirection(reflectedPoint(dimensions, roomX - 1, roomY));
+            addObstacleDirection(topLeftCorner(roomX, roomY + 1));
         }
         if (roomX >= 0 && roomY >= 0) {
-            addObstacleDirection(reflectedPoint(dimensions, roomX, roomY));
+            addObstacleDirection(topLeftCorner(roomX + 1, roomY + 1));
         }
         return true;
     }
@@ -136,6 +136,10 @@ public class Solution {
             roomCornerX + (invertX ? dimensions.x - point.x : point.x),
             roomCornerY + (invertY ? dimensions.y - point.y : point.y)
         );
+    }
+
+    private Point topLeftCorner(int roomX, int roomY) {
+        return new Point(roomX * dimensions.x,roomY * dimensions.y);
     }
 
     private void addObstacleDirection(Point obstacle) {
